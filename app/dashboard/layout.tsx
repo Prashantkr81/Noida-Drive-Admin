@@ -54,12 +54,6 @@ export default function DashboardLayout({
               />
 
               <NavItem
-                href="/dashboard/bookings"
-                label="Rental Requests"
-                icon="▤"
-              />
-
-              <NavItem
                 href="/dashboard/quotes"
                 label="Quotes"
                 icon="◇"
@@ -70,6 +64,26 @@ export default function DashboardLayout({
                 label="Sell Submissions"
                 icon="◆"
               />
+            </NavSection>
+
+            <NavSection title="Rentals">
+                <NavItem
+                    href="/dashboard/bookings"
+                    label="Rental Requests"
+                    icon="▤"
+                />
+
+                <NavItem
+                    href="/dashboard/bookings/active"
+                    label="Active Rentals"
+                    icon="◷"
+                />
+
+                <NavItem
+                    href="/dashboard/bookings/completed"
+                    label="Completed Rentals"
+                    icon="✓"
+                />
             </NavSection>
 
             <NavSection title="Management">
