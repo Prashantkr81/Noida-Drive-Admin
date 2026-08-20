@@ -9,10 +9,7 @@ import {
 } from 'firebase/firestore';
 
 import { db } from './config';
-
-import {
-  createNotification,
-} from './notificationWriter';
+import { createNotification } from './notificationWriter';
 
 /* ===================================== */
 /* TYPES */

@@ -128,9 +128,9 @@ export default function CarsPage() {
 
         <Link
           href="/dashboard/cars/new"
-          className="inline-flex items-center justify-center rounded-xl bg-cyan-500 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-cyan-600"
+          className="rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-cyan-600"
         >
-          + Add Car
+          + Add New Car
         </Link>
       </div>
 

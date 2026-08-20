@@ -9,6 +9,28 @@ import {
 import { db } from './config';
 
 /* ===================================== */
+/* UPDATE STATUS */
+/* ===================================== */
+
+export const updateQuoteStatus = async (
+  quoteId: string,
+  status: QuoteStatus,
+  reviewedBy: string,
+) => {
+  const quoteRef = doc(
+    db,
+    'quotes',
+    quoteId,
+  );
+
+  await updateDoc(quoteRef, {
+    status,
+    reviewedBy,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+/* ===================================== */
 /* TYPES */
 /* ===================================== */
 
