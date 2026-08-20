@@ -3,13 +3,17 @@
 import {
   collection,
   onSnapshot,
-  orderBy,
-  query,
 } from 'firebase/firestore';
+
 import { useEffect, useMemo, useState } from 'react';
+
 import Link from 'next/link';
 
 import { db } from '@/services/firebase/config';
+
+/* ===================================== */
+/* TYPES */
+/* ===================================== */
 
 type BookingStatus =
   | 'pending'
@@ -22,14 +26,20 @@ type BookingStatus =
 interface Booking {
   id: string;
 
+  /* User */
+
   userId: string;
   userName?: string;
   userPhone?: string;
   userEmail?: string;
 
+  /* Car */
+
   carId: string;
   carMake?: string;
   carModel?: string;
+
+  /* Rental */
 
   rentalType:
     | 'self_drive'
@@ -38,13 +48,21 @@ interface Booking {
   startDate?: unknown;
   endDate?: unknown;
 
-  pickupLocation: string;
+  /* Location */
+
+  pickupLocation?: string;
   dropLocation?: string;
+
+  /* Request */
 
   specialRequest?: string;
 
+  /* Pricing */
+
   estimatedPrice?: number;
   finalPrice?: number | null;
+
+  /* Workflow */
 
   status: BookingStatus;
 
@@ -52,9 +70,15 @@ interface Booking {
   rejectionReason?: string;
   reviewedBy?: string;
 
+  /* Metadata */
+
   createdAt?: unknown;
   updatedAt?: unknown;
 }
+
+/* ===================================== */
+/* PAGE */
+/* ===================================== */
 
 export default function BookingsPage() {
   const [bookings, setBookings] =
@@ -72,17 +96,16 @@ export default function BookingsPage() {
   const [status, setStatus] =
     useState('all');
 
+  /* =================================== */
+  /* FIRESTORE */
+  /* =================================== */
+
   useEffect(() => {
-    const q = query(
-      collection(db, 'bookings'),
-      orderBy(
-        'createdAt',
-        'desc',
-      ),
-    );
+    setLoading(true);
+    setError('');
 
     const unsubscribe = onSnapshot(
-      q,
+      collection(db, 'bookings'),
       (snapshot) => {
         const data =
           snapshot.docs.map(
@@ -113,6 +136,10 @@ export default function BookingsPage() {
     return unsubscribe;
   }, []);
 
+  /* =================================== */
+  /* FILTER */
+  /* =================================== */
+
   const filteredBookings =
     useMemo(() => {
       const searchValue =
@@ -120,31 +147,77 @@ export default function BookingsPage() {
 
       return bookings.filter(
         (booking) => {
-          const matchesSearch =
-            !searchValue ||
+          /*
+           * Only these statuses belong
+           * to the Rental Requests page.
+           *
+           * confirmed  → Active Rentals
+           * completed  → Completed Rentals
+           */
+          const isRequest =
+            booking.status ===
+              'pending' ||
+            booking.status ===
+              'reviewing' ||
+            booking.status ===
+              'rejected' ||
+            booking.status ===
+              'cancelled';
+
+          if (!isRequest) {
+            return false;
+          }
+
+          const carName =
             `${booking.carMake || ''} ${
               booking.carModel || ''
-            }`
-              .toLowerCase()
-              .includes(searchValue) ||
+            }`.toLowerCase();
+
+          const customerName =
             (
               booking.userName || ''
-            )
-              .toLowerCase()
-              .includes(searchValue) ||
+            ).toLowerCase();
+
+          const customerEmail =
             (
               booking.userEmail || ''
-            )
-              .toLowerCase()
-              .includes(searchValue) ||
-            booking.pickupLocation
+            ).toLowerCase();
+
+          const pickup =
+            (
+              booking.pickupLocation ||
+              ''
+            ).toLowerCase();
+
+          const customerPhone =
+            (
+              booking.userPhone || ''
+            ).toLowerCase();
+
+          const matchesSearch =
+            !searchValue ||
+            carName.includes(
+              searchValue,
+            ) ||
+            customerName.includes(
+              searchValue,
+            ) ||
+            customerEmail.includes(
+              searchValue,
+            ) ||
+            customerPhone.includes(
+              searchValue,
+            ) ||
+            pickup.includes(
+              searchValue,
+            ) ||
+            booking.id
               .toLowerCase()
               .includes(searchValue);
 
           const matchesStatus =
             status === 'all' ||
-            booking.status ===
-              status;
+            booking.status === status;
 
           return (
             matchesSearch &&
@@ -158,14 +231,51 @@ export default function BookingsPage() {
       status,
     ]);
 
+  /* =================================== */
+  /* COUNTS */
+  /* =================================== */
+
+  const pendingCount =
+    bookings.filter(
+      (booking) =>
+        booking.status === 'pending',
+    ).length;
+
+  const reviewingCount =
+    bookings.filter(
+      (booking) =>
+        booking.status ===
+        'reviewing',
+    ).length;
+
+  const rejectedCount =
+    bookings.filter(
+      (booking) =>
+        booking.status ===
+        'rejected',
+    ).length;
+
+  const cancelledCount =
+    bookings.filter(
+      (booking) =>
+        booking.status ===
+        'cancelled',
+    ).length;
+
+  /* =================================== */
+  /* RENDER */
+  /* =================================== */
+
   return (
     <div>
-      {/* Header */}
+      {/* ================================= */}
+      {/* HEADER */}
+      {/* ================================= */}
 
-      <div className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-8 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-cyan-600">
-            Marketplace
+            Rentals
           </p>
 
           <h1 className="mt-1 text-3xl font-bold tracking-tight text-slate-900">
@@ -173,29 +283,91 @@ export default function BookingsPage() {
           </h1>
 
           <p className="mt-2 text-sm text-slate-500">
-            Review and manage customer rental requests.
+            Review incoming rental requests before
+            they become active rentals.
           </p>
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-slate-500 shadow-sm">
-          {filteredBookings.length} requests
+        <div className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 shadow-sm">
+          <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            Open Requests
+          </p>
+
+          <p className="mt-1 text-lg font-bold text-slate-900">
+            {filteredBookings.length}
+          </p>
         </div>
       </div>
 
-      {/* Filters */}
+      {/* ================================= */}
+      {/* SUMMARY CARDS */}
+      {/* ================================= */}
+
+      <div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <SummaryCard
+          label="Pending"
+          value={pendingCount}
+          className="border-amber-200 bg-amber-50"
+          valueClassName="text-amber-700"
+        />
+
+        <SummaryCard
+          label="Reviewing"
+          value={reviewingCount}
+          className="border-blue-200 bg-blue-50"
+          valueClassName="text-blue-700"
+        />
+
+        <SummaryCard
+          label="Rejected"
+          value={rejectedCount}
+          className="border-red-200 bg-red-50"
+          valueClassName="text-red-700"
+        />
+
+        <SummaryCard
+          label="Cancelled"
+          value={cancelledCount}
+          className="border-slate-200 bg-slate-100"
+          valueClassName="text-slate-700"
+        />
+      </div>
+
+      {/* ================================= */}
+      {/* FILTERS */}
+      {/* ================================= */}
 
       <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-[1fr_200px]">
-          <input
-            value={search}
-            onChange={(event) =>
-              setSearch(
-                event.target.value,
-              )
-            }
-            placeholder="Search by customer, car, email or pickup location..."
-            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-800 outline-none transition focus:border-cyan-400 focus:bg-white"
-          />
+        <div className="grid gap-3 md:grid-cols-[1fr_190px]">
+          {/* Search */}
+
+          <div className="relative">
+            <input
+              type="text"
+              value={search}
+              onChange={(event) =>
+                setSearch(
+                  event.target.value,
+                )
+              }
+              placeholder="Search by customer, car, email, phone, pickup or request ID..."
+              className="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 pr-10 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-cyan-400 focus:bg-white"
+            />
+
+            {search && (
+              <button
+                type="button"
+                onClick={() =>
+                  setSearch('')
+                }
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Status */}
 
           <select
             value={status}
@@ -204,10 +376,10 @@ export default function BookingsPage() {
                 event.target.value,
               )
             }
-            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none focus:border-cyan-400"
+            className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-700 outline-none transition focus:border-cyan-400 focus:bg-white"
           >
             <option value="all">
-              All Statuses
+              All Requests
             </option>
 
             <option value="pending">
@@ -218,10 +390,6 @@ export default function BookingsPage() {
               Reviewing
             </option>
 
-            <option value="confirmed">
-              Confirmed
-            </option>
-
             <option value="rejected">
               Rejected
             </option>
@@ -229,62 +397,119 @@ export default function BookingsPage() {
             <option value="cancelled">
               Cancelled
             </option>
-
-            <option value="completed">
-              Completed
-            </option>
           </select>
         </div>
       </div>
 
-      {/* Loading */}
+      {/* ================================= */}
+      {/* SUMMARY */}
+      {/* ================================= */}
+
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-slate-500">
+          Showing{' '}
+          <span className="font-semibold text-slate-800">
+            {filteredBookings.length}
+          </span>{' '}
+          request
+          {filteredBookings.length !==
+          1
+            ? 's'
+            : ''}
+        </p>
+
+        {(search ||
+          status !== 'all') && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('');
+              setStatus('all');
+            }}
+            className="text-xs font-semibold text-cyan-600 hover:text-cyan-700"
+          >
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {/* ================================= */}
+      {/* LOADING */}
+      {/* ================================= */}
 
       {loading && (
-        <div className="rounded-2xl border border-slate-200 bg-white p-12 text-center shadow-sm">
-          <p className="text-sm text-slate-400">
+        <div className="rounded-2xl border border-slate-200 bg-white p-14 text-center shadow-sm">
+          <div className="mx-auto h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-cyan-500" />
+
+          <p className="mt-4 text-sm text-slate-400">
             Loading rental requests...
           </p>
         </div>
       )}
 
-      {/* Error */}
+      {/* ================================= */}
+      {/* ERROR */}
+      {/* ================================= */}
 
-      {error && !loading && (
-        <div className="rounded-2xl border border-red-200 bg-red-50 p-5">
-          <p className="text-sm font-medium text-red-600">
+      {!loading && error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
+          <p className="text-sm font-semibold text-red-700">
             {error}
           </p>
         </div>
       )}
 
-      {/* Empty */}
+      {/* ================================= */}
+      {/* EMPTY */}
+      {/* ================================= */}
 
       {!loading &&
         !error &&
-        filteredBookings.length === 0 && (
+        filteredBookings.length ===
+          0 && (
           <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-16 text-center">
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-xl text-slate-400">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-slate-100 text-2xl">
               🚘
             </div>
 
-            <h2 className="mt-4 font-semibold text-slate-800">
-              No rental requests found
+            <h2 className="mt-5 text-lg font-bold text-slate-800">
+              No Rental Requests
             </h2>
 
-            <p className="mt-1 text-sm text-slate-400">
-              Try changing your search or status filter.
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-slate-400">
+              There are no requests matching your
+              current filters.
             </p>
+
+            {(search ||
+              status !== 'all') && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch('');
+                  setStatus('all');
+                }}
+                className="mt-5 rounded-xl bg-cyan-500 px-5 py-2.5 text-xs font-semibold text-white transition hover:bg-cyan-600"
+              >
+                Clear Filters
+              </button>
+            )}
           </div>
         )}
 
-      {/* Table */}
+      {/* ================================= */}
+      {/* TABLE */}
+      {/* ================================= */}
 
       {!loading &&
         !error &&
-        filteredBookings.length > 0 && (
+        filteredBookings.length >
+          0 && (
           <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div className="overflow-x-auto">
               <table className="min-w-full text-left">
+                {/* Header */}
+
                 <thead className="border-b border-slate-200 bg-slate-50">
                   <tr>
                     <th className="px-5 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -296,7 +521,7 @@ export default function BookingsPage() {
                     </th>
 
                     <th className="px-5 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                      Dates
+                      Rental Period
                     </th>
 
                     <th className="px-5 py-4 text-[10px] font-bold uppercase tracking-wider text-slate-400">
@@ -315,6 +540,8 @@ export default function BookingsPage() {
                   </tr>
                 </thead>
 
+                {/* Body */}
+
                 <tbody className="divide-y divide-slate-100">
                   {filteredBookings.map(
                     (booking) => (
@@ -322,10 +549,12 @@ export default function BookingsPage() {
                         key={booking.id}
                         className="transition hover:bg-slate-50"
                       >
+                        {/* Customer */}
+
                         <td className="px-5 py-4">
                           <p className="text-sm font-semibold text-slate-800">
                             {booking.userName ||
-                              'Unknown'}
+                              'Unknown User'}
                           </p>
 
                           <p className="mt-1 text-xs text-slate-400">
@@ -335,18 +564,23 @@ export default function BookingsPage() {
                           </p>
                         </td>
 
+                        {/* Vehicle */}
+
                         <td className="px-5 py-4">
                           <p className="text-sm font-semibold text-slate-800">
                             {booking.carMake ||
-                              '—'}{' '}
+                              'Unknown'}{' '}
                             {booking.carModel ||
                               ''}
                           </p>
 
                           <p className="mt-1 text-xs text-slate-400">
-                            {booking.pickupLocation}
+                            {booking.pickupLocation ||
+                              'Pickup not specified'}
                           </p>
                         </td>
+
+                        {/* Dates */}
 
                         <td className="px-5 py-4">
                           <p className="text-xs text-slate-500">
@@ -355,19 +589,21 @@ export default function BookingsPage() {
                             )}
                           </p>
 
-                          <p className="mt-1 text-xs font-medium text-slate-700">
-                            →
+                          <p className="my-1 text-[10px] font-semibold text-slate-300">
+                            TO
                           </p>
 
-                          <p className="mt-1 text-xs text-slate-500">
+                          <p className="text-xs text-slate-500">
                             {formatDate(
                               booking.endDate,
                             )}
                           </p>
                         </td>
 
+                        {/* Rental Type */}
+
                         <td className="px-5 py-4">
-                          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
+                          <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-600">
                             {booking.rentalType ===
                             'chauffeur'
                               ? 'Chauffeur'
@@ -375,31 +611,32 @@ export default function BookingsPage() {
                           </span>
                         </td>
 
+                        {/* Price */}
+
                         <td className="px-5 py-4">
                           <p className="text-sm font-bold text-slate-800">
-                            {booking.finalPrice !=
-                            null
-                              ? `₹${Number(
-                                  booking.finalPrice,
-                                ).toLocaleString(
+                            {typeof booking.finalPrice ===
+                            'number'
+                              ? `₹${booking.finalPrice.toLocaleString(
                                   'en-IN',
                                 )}`
-                              : booking.estimatedPrice
-                                ? `₹${Number(
-                                    booking.estimatedPrice,
-                                  ).toLocaleString(
+                              : typeof booking.estimatedPrice ===
+                                  'number'
+                                ? `₹${booking.estimatedPrice.toLocaleString(
                                     'en-IN',
                                   )}`
                                 : '—'}
                           </p>
 
                           <p className="mt-1 text-[10px] text-slate-400">
-                            {booking.finalPrice !=
-                            null
+                            {typeof booking.finalPrice ===
+                            'number'
                               ? 'Final'
                               : 'Estimated'}
                           </p>
                         </td>
+
+                        {/* Status */}
 
                         <td className="px-5 py-4">
                           <StatusBadge
@@ -408,6 +645,8 @@ export default function BookingsPage() {
                             }
                           />
                         </td>
+
+                        {/* Action */}
 
                         <td className="px-5 py-4 text-right">
                           <Link
@@ -430,7 +669,39 @@ export default function BookingsPage() {
 }
 
 /* ===================================== */
-/* STATUS */
+/* SUMMARY CARD */
+/* ===================================== */
+
+function SummaryCard({
+  label,
+  value,
+  className,
+  valueClassName,
+}: {
+  label: string;
+  value: number;
+  className: string;
+  valueClassName: string;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border p-5 ${className}`}
+    >
+      <p className="text-xs font-medium text-slate-500">
+        {label}
+      </p>
+
+      <p
+        className={`mt-2 text-2xl font-bold ${valueClassName}`}
+      >
+        {value}
+      </p>
+    </div>
+  );
+}
+
+/* ===================================== */
+/* STATUS BADGE */
 /* ===================================== */
 
 function StatusBadge({
@@ -448,42 +719,42 @@ function StatusBadge({
     pending: {
       label: 'Pending',
       className:
-        'bg-amber-50 text-amber-700 border-amber-200',
+        'border-amber-200 bg-amber-50 text-amber-700',
     },
 
     reviewing: {
       label: 'Reviewing',
       className:
-        'bg-blue-50 text-blue-700 border-blue-200',
+        'border-blue-200 bg-blue-50 text-blue-700',
     },
 
     confirmed: {
       label: 'Confirmed',
       className:
-        'bg-emerald-50 text-emerald-700 border-emerald-200',
+        'border-emerald-200 bg-emerald-50 text-emerald-700',
     },
 
     rejected: {
       label: 'Rejected',
       className:
-        'bg-red-50 text-red-700 border-red-200',
+        'border-red-200 bg-red-50 text-red-700',
     },
 
     cancelled: {
       label: 'Cancelled',
       className:
-        'bg-slate-100 text-slate-600 border-slate-200',
+        'border-slate-200 bg-slate-100 text-slate-600',
     },
 
     completed: {
       label: 'Completed',
       className:
-        'bg-violet-50 text-violet-700 border-violet-200',
+        'border-violet-200 bg-violet-50 text-violet-700',
     },
   };
 
   const current =
-    config[status] ||
+    config[status] ??
     config.pending;
 
   return (
@@ -501,7 +772,7 @@ function StatusBadge({
 
 function formatDate(
   value: unknown,
-) {
+): string {
   if (!value) {
     return 'N/A';
   }
@@ -512,23 +783,28 @@ function formatDate(
 
   if (
     typeof value === 'object' &&
-    value !== null &&
-    'toDate' in value
+    value !== null
   ) {
-    const date = (
+    const timestamp =
       value as {
-        toDate: () => Date;
-      }
-    ).toDate();
+        toDate?: () => Date;
+      };
 
-    return date.toLocaleDateString(
-      'en-IN',
-      {
-        day: 'numeric',
-        month: 'short',
-        year: 'numeric',
-      },
-    );
+    if (
+      typeof timestamp.toDate ===
+      'function'
+    ) {
+      return timestamp
+        .toDate()
+        .toLocaleDateString(
+          'en-IN',
+          {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+          },
+        );
+    }
   }
 
   return 'N/A';
