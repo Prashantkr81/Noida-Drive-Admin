@@ -1,8 +1,6 @@
 import {
   collection,
   onSnapshot,
-  orderBy,
-  query,
 } from 'firebase/firestore';
 
 import { db } from './config';
@@ -42,10 +40,10 @@ export interface Car {
   fuelType: FuelType;
   transmission: TransmissionType;
 
-  mileage: number;
+  mileage?: number;
   color?: string;
 
-  images: string[];
+  images?: string[];
   thumbnail?: string;
 
   isAvailableForRent: boolean;
@@ -68,26 +66,75 @@ export interface Car {
 }
 
 /**
- * Subscribe to ALL cars for the admin panel.
+ * Convert Firestore Timestamp / Date / string
+ * into milliseconds.
+ */
+function getTimestampMillis(
+  value: unknown,
+): number {
+  if (!value) {
+    return 0;
+  }
+
+  if (
+    typeof value === 'object' &&
+    value !== null
+  ) {
+    const firestoreValue =
+      value as {
+        toMillis?: () => number;
+        toDate?: () => Date;
+      };
+
+    if (
+      typeof firestoreValue.toMillis ===
+      'function'
+    ) {
+      return firestoreValue.toMillis();
+    }
+
+    if (
+      typeof firestoreValue.toDate ===
+      'function'
+    ) {
+      return firestoreValue
+        .toDate()
+        .getTime();
+    }
+  }
+
+  if (value instanceof Date) {
+    return value.getTime();
+  }
+
+  if (typeof value === 'string') {
+    const timestamp = Date.parse(value);
+
+    return Number.isNaN(timestamp)
+      ? 0
+      : timestamp;
+  }
+
+  return 0;
+}
+
+/**
+ * Subscribe to all cars for Admin Panel.
  *
- * Unlike the mobile app:
- * - does not filter by rent availability
- * - does not filter by sale listing
- * - does not filter by approval status
- *
- * Admin needs visibility into every listing.
+ * No Firestore orderBy is used because some
+ * existing documents may not contain createdAt.
  */
 export const subscribeToAllCars = (
   onData: (cars: Car[]) => void,
   onError?: (error: Error) => void,
 ) => {
-  const q = query(
-    collection(db, 'cars'),
-    orderBy('createdAt', 'desc'),
+  const carsCollection = collection(
+    db,
+    'cars',
   );
 
   return onSnapshot(
-    q,
+    carsCollection,
     (snapshot) => {
       const cars = snapshot.docs.map(
         (document) =>
@@ -95,6 +142,17 @@ export const subscribeToAllCars = (
             id: document.id,
             ...document.data(),
           }) as Car,
+      );
+
+      // Newest first when createdAt exists.
+      cars.sort(
+        (a, b) =>
+          getTimestampMillis(
+            b.createdAt,
+          ) -
+          getTimestampMillis(
+            a.createdAt,
+          ),
       );
 
       onData(cars);
