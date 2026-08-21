@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -201,16 +202,15 @@ export const confirmBooking = async (
   );
 
   /*
-   * Read booking first so we know
-   * which user should receive the
-   * notification.
+   * Read booking first so we know:
+   *
+   * 1. Which car is being rented.
+   * 2. Which user should receive
+   *    the notification.
    */
   const snapshot =
-    await import(
-      'firebase/firestore'
-    ).then(
-      ({ getDoc }) =>
-        getDoc(bookingRef),
+    await getDoc(
+      bookingRef,
     );
 
   if (!snapshot.exists()) {
@@ -222,6 +222,31 @@ export const confirmBooking = async (
   const booking =
     snapshot.data() as AdminBooking;
 
+  /*
+   * A confirmed booking must have
+   * a car associated with it.
+   */
+  if (!booking.carId) {
+    throw new Error(
+      'Car ID is missing for this booking.',
+    );
+  }
+
+  /*
+   * IMPORTANT:
+   *
+   * Once the rental is confirmed,
+   * the car must no longer appear
+   * as available for rental.
+   */
+  await makeCarUnavailableForRental(
+    booking.carId,
+    reviewedBy,
+  );
+
+  /*
+   * Now confirm the booking.
+   */
   await updateDoc(
     bookingRef,
     {
@@ -302,11 +327,8 @@ export const rejectBooking = async (
   );
 
   const snapshot =
-    await import(
-      'firebase/firestore'
-    ).then(
-      ({ getDoc }) =>
-        getDoc(bookingRef),
+    await getDoc(
+      bookingRef,
     );
 
   if (!snapshot.exists()) {
@@ -366,69 +388,89 @@ export const rejectBooking = async (
 /* MARK COMPLETED */
 /* ===================================== */
 
-export const completeBooking =
-  async (
-    bookingId: string,
-    reviewedBy: string,
-  ) => {
-    const bookingRef = doc(
-      db,
-      'bookings',
-      bookingId,
+export const completeBooking = async (
+  bookingId: string,
+  reviewedBy: string,
+) => {
+  const bookingRef = doc(
+    db,
+    'bookings',
+    bookingId,
+  );
+
+  const snapshot =
+    await getDoc(bookingRef);
+
+  if (!snapshot.exists()) {
+    throw new Error(
+      'Booking not found.',
     );
+  }
 
-    const snapshot =
-      await import(
-        'firebase/firestore'
-      ).then(
-        ({ getDoc }) =>
-          getDoc(bookingRef),
-      );
+  const booking =
+    snapshot.data() as AdminBooking;
 
-    if (!snapshot.exists()) {
-      throw new Error(
-        'Booking not found.',
-      );
-    }
+  if (!booking.carId) {
+    throw new Error(
+      'Car ID is missing for this booking.',
+    );
+  }
 
-    const booking =
-      snapshot.data() as AdminBooking;
+  /*
+   * Rental is completed.
+   *
+   * Make the vehicle available again
+   * for the next rental.
+   */
+  await makeCarAvailableForRental(
+    booking.carId,
+    reviewedBy,
+  );
 
-    await updateDoc(
-      bookingRef,
-      {
-        status: 'completed',
-        reviewedBy,
-        updatedAt:
-          serverTimestamp(),
+  /*
+   * Mark booking as completed.
+   */
+  await updateDoc(
+    bookingRef,
+    {
+      status: 'completed',
+
+      reviewedBy,
+
+      updatedAt:
+        serverTimestamp(),
+    },
+  );
+
+  /*
+   * Notification failure must NOT
+   * make completion fail.
+   */
+  try {
+    await createNotification({
+      userId:
+        booking.userId,
+
+      title:
+        'Rental Completed',
+
+      message:
+        'Your rental has been marked as completed.',
+
+      type: 'booking',
+
+      data: {
+        screen: `/bookings/${bookingId}`,
+        bookingId,
       },
+    });
+  } catch (notificationError) {
+    console.error(
+      'COMPLETE BOOKING NOTIFICATION ERROR:',
+      notificationError,
     );
-
-    try {
-      await createNotification({
-        userId:
-          booking.userId,
-
-        title:
-          'Rental Completed',
-
-        message:
-          'Your rental has been marked as completed.',
-
-        type: 'booking',
-
-        data: {
-          screen: `/bookings/${bookingId}`,
-          bookingId,
-        },
-      });
-    } catch (notificationError) {
-      console.error(
-        'COMPLETE BOOKING NOTIFICATION ERROR:',
-        notificationError,
-      );
-    }
-  };
+  }
+};
 
 /* ===================================== */
 /* CANCEL BOOKING */
@@ -446,11 +488,8 @@ export const cancelBooking =
     );
 
     const snapshot =
-      await import(
-        'firebase/firestore'
-      ).then(
-        ({ getDoc }) =>
-          getDoc(bookingRef),
+      await getDoc(
+        bookingRef,
       );
 
     if (!snapshot.exists()) {
@@ -466,7 +505,9 @@ export const cancelBooking =
       bookingRef,
       {
         status: 'cancelled',
+
         reviewedBy,
+
         updatedAt:
           serverTimestamp(),
       },
