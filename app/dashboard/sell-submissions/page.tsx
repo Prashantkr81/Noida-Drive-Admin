@@ -275,12 +275,9 @@ export default function SellSubmissionsPage() {
                           </p>
 
                           <p className="mt-1 text-xs text-slate-400">
-                            {submission.year}{' '}
-                            ·{' '}
-                            {submission.kilometersDriven.toLocaleString(
-                              'en-IN',
-                            )}{' '}
-                            km
+                            {typeof submission.kilometersDriven === 'number'
+                            ? `${submission.kilometersDriven.toLocaleString('en-IN')} km`
+                            : 'Mileage not specified'}
                           </p>
                         </td>
 

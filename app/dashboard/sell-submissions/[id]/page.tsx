@@ -139,42 +139,46 @@ export default function SellSubmissionDetailsPage() {
   /* ACTION WRAPPER */
   /* =================================== */
 
-  const runAction = async (
-    action: () => Promise<void>,
-  ) => {
-    try {
-      setSaving(true);
-      setError('');
-
-      await action();
-    } catch (err) {
-      console.error(
-        'SELL SUBMISSION ACTION ERROR:',
-        err,
-      );
-
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Unable to update submission.',
-      );
-    } finally {
-      setSaving(false);
-    }
-  };
-
   /* =================================== */
-  /* START REVIEW */
-  /* =================================== */
+/* ACTION WRAPPER */
+/* =================================== */
 
-  const handleStartReview = () => {
-    return runAction(() =>
-      startSellSubmissionReview(
-        id,
-        'admin',
-      ),
+const runAction = async (
+  action: () => Promise<unknown>,
+) => {
+  try {
+    setSaving(true);
+    setError('');
+
+    await action();
+  } catch (err) {
+    console.error(
+      'SELL SUBMISSION ACTION ERROR:',
+      err,
     );
-  };
+
+    setError(
+      err instanceof Error
+        ? err.message
+        : 'Unable to update submission.',
+    );
+  } finally {
+    setSaving(false);
+  }
+};
+
+/* =================================== */
+/* START REVIEW */
+/* =================================== */
+
+const handleStartReview = () => {
+  return runAction(() =>
+    startSellSubmissionReview(
+      id,
+      'admin',
+    ),
+  );
+};
 
   /* =================================== */
   /* APPROVE */
